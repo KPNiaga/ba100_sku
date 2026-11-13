@@ -1718,7 +1718,7 @@
       try {
         const { error } = await supabaseClient.from('sku_master').insert([{
           company_id,
-          sku_code: sku_code || '',
+          sku_code: sku_code || null,
           pallet_size,
           sku_name,
           cost_price,
@@ -1900,7 +1900,7 @@
         if (sku_name && cost_price_raw && !isNaN(parseFloat(cost_price_raw))) {
           rows.push({
             company_id: company_id,
-            sku_code: sku_code ? sku_code.toUpperCase() : '',
+            sku_code: sku_code ? sku_code.toUpperCase() : null,
             sku_name: sku_name,
             pallet_size: pallet_size || '100',
             cost_price: parseFloat(cost_price_raw),
