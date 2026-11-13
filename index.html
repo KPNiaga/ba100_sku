@@ -280,7 +280,7 @@
     </div>
   </div>
 
-  <!-- Modal Simulasi Kos Penghantaran & DC (BARU) -->
+  <!-- Modal Simulasi Kos Penghantaran & DC -->
   <div id="modal-simulation" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto custom-scrollbar">
       <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
@@ -484,8 +484,8 @@
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-600 uppercase mb-1">Kod SKU <span class="text-rose-500">*</span></label>
-            <input type="text" id="new-sku-code" required placeholder="cth: BEV-001" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm uppercase">
+            <label class="block font-semibold text-slate-600 uppercase mb-1">Kod SKU <span class="text-slate-400 font-normal normal-case">(Pilihan)</span></label>
+            <input type="text" id="new-sku-code" placeholder="cth: BEV-001" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm uppercase">
           </div>
           <div>
             <label class="block font-semibold text-slate-600 uppercase mb-1">Muatan Palet (Bil. Karton)</label>
@@ -1295,7 +1295,7 @@
           <tr class="hover:bg-slate-50/75 transition">
             <td class="py-3.5 px-4">
               <p class="font-bold text-slate-800 leading-tight">${sku.sku_name}</p>
-              <p class="text-xs font-mono text-slate-400">${sku.sku_code}</p>
+              <p class="text-xs font-mono text-slate-400">${sku.sku_code || '-'}</p>
               <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">${cartonCount} ktn/palet</span>
             </td>
             <td class="py-3.5 px-4 text-center">
@@ -1545,7 +1545,7 @@
       }
     }
 
-    // Modal Simulasi Kos Penghantaran & DC (Logik Baharu)
+    // Modal Simulasi Kos Penghantaran & DC
     function populateSimStateDropdown() {
       const stateSelect = document.getElementById('sim-state-select');
       if (!stateSelect) return;
@@ -1597,13 +1597,11 @@
       document.getElementById('sim-sku-base-cost').innerText = `RM ${parseFloat(sku.cost_price || 0).toFixed(2)} /ktn`;
       document.getElementById('sim-sku-pallet-cap').innerText = `${cartonCount} ktn/palet`;
 
-      // Pra-isi kuantiti dengan muatan palet atau nilai lalai 60
       const cartonInput = document.getElementById('sim-carton-input');
       if (!cartonInput.value || parseInt(cartonInput.value, 10) <= 0) {
         cartonInput.value = cartonCount || 60;
       }
 
-      // Pastikan dropdown negeri ada nilai
       const stateSelect = document.getElementById('sim-state-select');
       if (!stateSelect.value && stateSelect.options.length > 1) {
         stateSelect.selectedIndex = 1;
@@ -1645,30 +1643,23 @@
         return;
       }
 
-      // 1. Pecahan Muatan
       const fullPallets = Math.floor(qty / palletCapacity);
       const looseCartons = qty % palletCapacity;
 
-      // 2. Kos DC Bahagian Palet Penuh: (Pallet In + Storage + Pallet Out) * Bil. Palet Penuh
       const fullPalletUnitCost = pIn + storage + pOut;
       const fullPalletTotalCost = fullPallets * fullPalletUnitCost;
 
-      // 3. Kos DC Bahagian Loose: (((Pallet In + Storage) / Pallet Capacity) + Carton Out) * Bil. Loose Cartons
       const looseCartonUnitCost = ((pIn + storage) / palletCapacity) + cOut;
       const looseCartonTotalCost = looseCartons * looseCartonUnitCost;
 
-      // 4. Jumlah Kos DC
       const totalDcCost = fullPalletTotalCost + looseCartonTotalCost;
       const dcCostPerCarton = totalDcCost / qty;
 
-      // 5. Caj Lori
       const deliveryCostPerCarton = deliveryRate > 0 ? (deliveryRate / qty) : 0;
 
-      // 6. Jumlah Keseluruhan (Pilihan 2: Kos Produk + Kos DC + Caj Penghantaran Lori)
       const totalLandedCostPerCarton = baseCost + dcCostPerCarton + deliveryCostPerCarton;
       const totalEntireTripCost = (baseCost * qty) + totalDcCost + deliveryRate;
 
-      // Kemaskini Paparan UI
       document.getElementById('sim-breakdown-loads').innerText = `${fullPallets} palet penuh + ${looseCartons} karton loose`;
       document.getElementById('sim-cost-full-pallets').innerText = `RM ${fullPalletTotalCost.toFixed(2)} (${fullPallets} palet @ RM ${fullPalletUnitCost.toFixed(2)})`;
       document.getElementById('sim-cost-loose-cartons').innerText = `RM ${looseCartonTotalCost.toFixed(2)} (${looseCartons} ktn @ RM ${looseCartonUnitCost.toFixed(3)}/ktn)`;
@@ -1727,7 +1718,7 @@
       try {
         const { error } = await supabaseClient.from('sku_master').insert([{
           company_id,
-          sku_code,
+          sku_code: sku_code || '',
           pallet_size,
           sku_name,
           cost_price,
@@ -1846,11 +1837,37 @@
       reader.readAsText(file);
     }
 
+    // Fungsi pembantu untuk memisahkan satu baris CSV dengan tepat (mengekalkan ruang kosong dalam nama)
+    function splitCsvLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    }
+
     function parseCsvText(csvText) {
       const lines = csvText.split(/\r\n|\n/).filter(line => line.trim().length > 0);
       if (lines.length < 2) return [];
 
-      const rawHeaders = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+      const rawHeaders = splitCsvLine(lines[0]).map(h => h.toLowerCase().replace(/^["']|["']$/g, ''));
       
       const expected = ['company_id', 'sku_code', 'sku_name', 'pallet_size', 'cost_price'];
       const colMap = {};
@@ -1858,8 +1875,8 @@
         colMap[key] = rawHeaders.indexOf(key);
       });
 
-      if (colMap['sku_code'] === -1 || colMap['sku_name'] === -1 || colMap['cost_price'] === -1) {
-        showToast('Lajur CSV tidak lengkap! Pastikan ada sku_code, sku_name, cost_price.', 'error');
+      if (colMap['sku_name'] === -1 || colMap['cost_price'] === -1) {
+        showToast('Lajur CSV tidak lengkap! Pastikan ada sku_name dan cost_price.', 'error');
         return [];
       }
 
@@ -1867,10 +1884,10 @@
       const targetCompanyId = document.getElementById('csv-sku-company').value;
 
       for (let i = 1; i < lines.length; i++) {
-        const rowValues = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
-        const cleanValues = rowValues.map(v => v ? v.trim().replace(/^["']|["']$/g, '') : '');
+        const rowValues = splitCsvLine(lines[i]);
+        const cleanValues = rowValues.map(v => v ? v.replace(/^["']|["']$/g, '').trim() : '');
 
-        const sku_code = cleanValues[colMap['sku_code']];
+        const sku_code = colMap['sku_code'] !== -1 ? (cleanValues[colMap['sku_code']] || '') : '';
         const sku_name = cleanValues[colMap['sku_name']];
         const cost_price_raw = cleanValues[colMap['cost_price']];
         const pallet_size = colMap['pallet_size'] !== -1 ? (cleanValues[colMap['pallet_size']] || '100') : '100';
@@ -1880,10 +1897,10 @@
           company_id = targetCompanyId;
         }
 
-        if (sku_code && sku_name && cost_price_raw && !isNaN(parseFloat(cost_price_raw))) {
+        if (sku_name && cost_price_raw && !isNaN(parseFloat(cost_price_raw))) {
           rows.push({
             company_id: company_id,
-            sku_code: sku_code.toUpperCase(),
+            sku_code: sku_code ? sku_code.toUpperCase() : '',
             sku_name: sku_name,
             pallet_size: pallet_size || '100',
             cost_price: parseFloat(cost_price_raw),
