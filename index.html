@@ -291,6 +291,66 @@
     </div>
   </div>
 
+  <!-- Modal Cadang Tolak SKU (Panel) -->
+  <div id="modal-propose-reject" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 transition-all">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+        <h3 class="text-base font-bold text-rose-700 flex items-center gap-2">
+          <i class="ph-bold ph-thumbs-down text-rose-600"></i>
+          <span>Cadang Penolakan SKU</span>
+        </h3>
+        <button onclick="closeModal('modal-propose-reject')" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+      </div>
+
+      <div class="bg-rose-50/70 border border-rose-100 p-3 rounded-xl mb-4 text-xs space-y-1">
+        <p class="font-bold text-slate-800" id="prop-reject-sku-name">Nama SKU</p>
+        <p class="text-rose-700 text-[11px]">Syor penolakan anda akan dipaparkan kepada semua ahli panel dan Decider untuk semakan.</p>
+      </div>
+
+      <form onsubmit="submitRejectProposal(event)" class="space-y-4">
+        <input type="hidden" id="prop-reject-sku-id">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Sebab / Justifikasi Cadangan Tolak <span class="text-rose-500">*</span></label>
+          <textarea id="prop-reject-reason-input" rows="3" required placeholder="Contoh: Kos pembekal terlalu tinggi berbanding harga pasaran semasa..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-propose-reject')" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl">Batal</button>
+          <button type="submit" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Hantar Cadangan Tolak</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Tolak Terus SKU (Decider / Admin) -->
+  <div id="modal-reject-sku" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 transition-all">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+        <h3 class="text-base font-bold text-rose-700 flex items-center gap-2">
+          <i class="ph-bold ph-prohibit text-rose-600"></i>
+          <span>Sahkan Penolakan SKU</span>
+        </h3>
+        <button onclick="closeModal('modal-reject-sku')" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+      </div>
+
+      <div class="bg-rose-50/70 border border-rose-100 p-3 rounded-xl mb-4 text-xs space-y-1">
+        <p class="font-bold text-slate-800" id="reject-sku-name">Nama SKU</p>
+        <p class="text-rose-700 text-[11px]">SKU ini akan ditandakan sebagai <strong>Ditolak</strong> dan tiada harga jualan akan ditetapkan.</p>
+      </div>
+
+      <form onsubmit="submitRejectSku(event)" class="space-y-4">
+        <input type="hidden" id="reject-sku-id">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Sebab Penolakan Rasmi <span class="text-rose-500">*</span></label>
+          <textarea id="reject-reason-input" rows="3" required placeholder="Contoh: Margin tidak mencukupi / produk tidak memenuhi kriteria pasaran..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-reject-sku')" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl">Batal</button>
+          <button type="submit" id="btn-submit-reject-sku" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Muktamadkan Tolak</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal Simulasi Kos Penghantaran & DC -->
   <div id="modal-simulation" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto custom-scrollbar">
@@ -697,6 +757,7 @@
     let logisticsCosts = [];
     let currentSimSku = null;
     let isOnboardingPasswordSetup = false;
+    let localRejectionReasons = {}; // Fallback simpanan sebab penolakan
 
     // Data Lalai Kadar Lori Destinasi (Fallback jika jadual Supabase belum diisi)
     const DEFAULT_LOGISTICS_RATES = [
@@ -721,6 +782,20 @@
       const match = sku.pallet_size.toString().match(/\d+/);
       const parsed = match ? parseInt(match[0], 10) : 100;
       return (parsed && parsed > 0) ? parsed : 100;
+    }
+
+    // Semak sama ada cadangan adalah syor penolakan
+    function isRejectProposal(proposal) {
+      if (!proposal) return false;
+      const price = parseFloat(proposal.proposed_price || 0);
+      const just = (proposal.justification || '').trim();
+      return price === 0 && just.startsWith('[CADANGAN TOLAK]');
+    }
+
+    // Ekstrak teks sebab daripada cadangan penolakan
+    function extractRejectProposalReason(proposal) {
+      if (!proposal || !proposal.justification) return 'Tiada sebab dinyatakan';
+      return proposal.justification.replace(/^\[CADANGAN TOLAK\]\s*/i, '').trim() || 'Tiada sebab dinyatakan';
     }
 
     // Toast Notifications
@@ -1145,6 +1220,7 @@
       tbody.innerHTML = skus.map(sku => {
         const proposals = sku.price_proposals || [];
         const myProposal = proposals.find(p => p.proposed_by === currentUser.id);
+        const myProposalIsReject = isRejectProposal(myProposal);
         const endorsements = sku.pricing_endorsements || [];
         const myVote = endorsements.find(e => e.panel_id === currentUser.id);
 
@@ -1162,11 +1238,18 @@
         const landedCostPallet = baseCostPerCarton + logisticsPalletPerCarton;
         const landedCostCarton = baseCostPerCarton + logisticsCartonPerCarton;
 
-        const uniquePrices = [...new Set(proposals.map(p => parseFloat(p.proposed_price)))];
-        const isConsensus = proposals.length >= 2 && uniquePrices.length === 1;
+        // Pisahkan cadangan harga dan cadangan penolakan
+        const priceProposals = proposals.filter(p => !isRejectProposal(p));
+        const rejectProposals = proposals.filter(p => isRejectProposal(p));
+
+        const uniquePrices = [...new Set(priceProposals.map(p => parseFloat(p.proposed_price)))];
+        const isPriceConsensus = proposals.length >= 2 && rejectProposals.length === 0 && uniquePrices.length === 1;
+        const isRejectConsensus = proposals.length >= 2 && priceProposals.length === 0 && rejectProposals.length >= 2;
 
         const endorseCount = endorsements.filter(e => e.decision === 'endorse').length;
         const rejectCount = endorsements.filter(e => e.decision === 'reject').length;
+
+        const rejectReasonText = sku.rejection_reason || localRejectionReasons[sku.id] || 'Tiada sebab dinyatakan';
 
         let statusBadge = '';
         if (sku.status === 'proposal_open') {
@@ -1175,6 +1258,8 @@
           statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">2. Undian Dibuka</span>`;
         } else if (sku.status === 'finalized') {
           statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">3. Dimuktamadkan</span>`;
+        } else if (sku.status === 'rejected') {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">Ditolak</span>`;
         } else {
           statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">${sku.status}</span>`;
         }
@@ -1223,7 +1308,7 @@
           </div>
         `;
 
-        const myCurrentPrice = myProposal ? parseFloat(myProposal.proposed_price) : '';
+        const myCurrentPrice = (myProposal && !myProposalIsReject) ? parseFloat(myProposal.proposed_price) : '';
 
         const inlineProposalHtml = sku.status === 'proposal_open' ? `
           <div class="w-72 space-y-1.5">
@@ -1243,18 +1328,31 @@
                 type="button" 
                 onclick="submitInlineProposal('${sku.id}')" 
                 class="absolute right-1.5 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition" 
-                title="Simpan Cadangan">
+                title="Simpan Cadangan Harga">
                 Simpan
               </button>
             </div>
             <div id="live-margin-${sku.id}" class="text-[10px] p-2 rounded-xl border bg-slate-50 border-slate-200 text-slate-600 space-y-1">
               ${renderLiveMarginContent(myCurrentPrice, landedCostPallet, landedCostCarton, isDc, baseCostPerCarton)}
             </div>
-            ${proposals.length > 0 ? `
-              <div class="text-[10px] text-slate-400">
-                ${proposals.length} cadangan dimasukkan oleh panel
-              </div>
-            ` : ''}
+            <div class="flex items-center justify-between pt-0.5">
+              <span class="text-[10px] text-slate-400">
+                ${proposals.length > 0 ? `${proposals.length} maklum balas panel` : 'Belum ada cadangan'}
+              </span>
+              <button 
+                type="button" 
+                onclick="openProposeRejectModal('${sku.id}')" 
+                class="px-2 py-1 rounded-lg border text-[10px] font-bold transition flex items-center gap-1 ${myProposalIsReject ? 'bg-rose-600 text-white border-rose-600 shadow-xs' : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'}"
+                title="Cadang supaya SKU ini ditolak">
+                <i class="ph-bold ph-thumbs-down"></i>
+                <span>${myProposalIsReject ? 'Anda Cadang Tolak' : 'Cadang Tolak'}</span>
+              </button>
+            </div>
+          </div>
+        ` : sku.status === 'rejected' ? `
+          <div class="space-y-1 max-w-xs whitespace-normal">
+            <span class="text-xs font-bold text-rose-600 block">SKU Ditolak</span>
+            <p class="text-[11px] text-slate-500">Sebab: <span class="text-slate-700 font-medium">${rejectReasonText}</span></p>
           </div>
         ` : `
           <div class="space-y-1">
@@ -1266,11 +1364,33 @@
         let proposalOverviewHtml = '';
         if (proposals.length > 0) {
           proposalOverviewHtml = `
-            <div class="space-y-1.5 mt-2 max-w-xs">
+            <div class="space-y-1.5 mt-2 max-w-xs whitespace-normal">
               <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Cadangan Panel (${proposals.length}):</span>
               ${proposals.map(p => {
                 const isSelected = sku.selected_proposal_id === p.id;
                 const authorName = (p.proposed_by === currentUser.id) ? 'Cadangan Anda' : 'Ahli Panel';
+                const isRejectItem = isRejectProposal(p);
+
+                if (isRejectItem) {
+                  const reasonSnippet = extractRejectProposalReason(p);
+                  return `
+                    <div class="p-2 rounded-xl border text-[11px] flex items-start justify-between gap-2 shadow-xs bg-rose-50/80 border-rose-200">
+                      <div class="space-y-0.5">
+                        <span class="text-rose-700 font-bold flex items-center gap-1">
+                          <i class="ph-bold ph-thumbs-down"></i> Syor Tolak SKU
+                        </span>
+                        <span class="text-[10px] text-slate-500 block">${authorName}</span>
+                        <p class="text-[10px] text-rose-800 italic leading-snug">"${reasonSnippet}"</p>
+                      </div>
+                      ${(isDecider || isAdmin) && sku.status === 'proposal_open' ? `
+                        <button onclick="openRejectSkuModal('${sku.id}', '${reasonSnippet.replace(/'/g, "\\'")}')" class="shrink-0 text-[10px] font-bold px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-sm transition flex items-center gap-1">
+                          <i class="ph-bold ph-prohibit"></i> Sahkan Tolak
+                        </button>
+                      ` : ''}
+                    </div>
+                  `;
+                }
+
                 return `
                   <div class="p-2 rounded-xl border text-[11px] flex items-center justify-between gap-2 shadow-xs transition ${isSelected ? 'bg-indigo-50 border-indigo-300 font-semibold' : 'bg-white border-slate-200 hover:border-slate-300'}">
                     <div>
@@ -1285,10 +1405,16 @@
                   </div>
                 `;
               }).join('')}
-              ${isConsensus && sku.status === 'proposal_open' ? `
+              ${isPriceConsensus && sku.status === 'proposal_open' ? `
                 <div class="text-[10px] bg-emerald-50 text-emerald-800 p-2 rounded-xl font-bold border border-emerald-200 flex items-center gap-1.5">
                   <i class="ph-bold ph-check-circle text-emerald-600 text-sm"></i>
                   <span>Konsensus Sebulat Suara (RM ${uniquePrices[0].toFixed(2)} /ktn)</span>
+                </div>
+              ` : ''}
+              ${isRejectConsensus && sku.status === 'proposal_open' ? `
+                <div class="text-[10px] bg-rose-50 text-rose-800 p-2 rounded-xl font-bold border border-rose-200 flex items-center gap-1.5">
+                  <i class="ph-bold ph-warning-circle text-rose-600 text-sm"></i>
+                  <span>Konsensus Tolak Sebulat Suara (${rejectProposals.length} Panel)</span>
                 </div>
               ` : ''}
             </div>
@@ -1301,6 +1427,13 @@
             <div class="text-center">
               <span class="text-sm font-extrabold text-emerald-600 block">RM ${parseFloat(sku.final_selling_price || 0).toFixed(2)}</span>
               <span class="text-[10px] text-slate-400">Harga Rasmi /ktn</span>
+            </div>
+          `;
+        } else if (sku.status === 'rejected') {
+          voteColHtml = `
+            <div class="text-center bg-rose-50 border border-rose-200 p-2 rounded-xl max-w-[180px] mx-auto whitespace-normal">
+              <span class="text-xs font-extrabold text-rose-600 block">DITOLAK</span>
+              <span class="text-[10px] text-rose-700 block mt-0.5 leading-tight">${rejectReasonText}</span>
             </div>
           `;
         } else if (sku.status === 'voting_open') {
@@ -1334,7 +1467,7 @@
             voteColHtml = `
               <div class="text-center">
                 <span class="text-[10px] text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-lg inline-block">
-                  ${(isDecider || isAdmin) ? 'Sila klik "Buka Undian"' : 'Menunggu Pilihan Decider'}
+                  ${(isDecider || isAdmin) ? 'Sila Pilih Tindakan' : 'Menunggu Keputusan Decider'}
                 </span>
               </div>
             `;
@@ -1343,16 +1476,27 @@
 
         let actionColHtml = '';
         if (sku.status === 'proposal_open') {
+          const consensusRejectReason = rejectProposals.length > 0 ? extractRejectProposalReason(rejectProposals[0]) : '';
           actionColHtml = `
             <div class="flex flex-col items-end gap-1.5">
-              ${isConsensus && (isDecider || isAdmin) ? `
+              ${isPriceConsensus && (isDecider || isAdmin) ? `
                 <button onclick="handleFinalizeConsensus('${sku.id}', ${uniquePrices[0]})" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-xs flex items-center gap-1">
                   <i class="ph-bold ph-check"></i> Sahkan Konsensus
+                </button>
+              ` : ''}
+              ${isRejectConsensus && (isDecider || isAdmin) ? `
+                <button onclick="openRejectSkuModal('${sku.id}', '${consensusRejectReason.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold shadow-xs flex items-center gap-1">
+                  <i class="ph-bold ph-prohibit"></i> Sahkan Konsensus Tolak
                 </button>
               ` : ''}
               <button onclick="openProposalModal('${sku.id}')" class="text-[10px] text-slate-500 hover:text-indigo-600 underline">
                 Tambah Justifikasi
               </button>
+              ${(isDecider || isAdmin) ? `
+                <button onclick="openRejectSkuModal('${sku.id}', '${consensusRejectReason.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition">
+                  <i class="ph-bold ph-prohibit"></i> Tolak SKU
+                </button>
+              ` : ''}
             </div>
           `;
         } else if (sku.status === 'voting_open') {
@@ -1369,8 +1513,26 @@
                 </button>
               </div>
               ${(isDecider || isAdmin) ? `
-                <button onclick="handleFinalizeDecision('${sku.id}')" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold shadow-xs flex items-center gap-1">
-                  <i class="ph-bold ph-lock-simple"></i> Muktamadkan
+                <div class="flex items-center gap-1.5">
+                  <button onclick="openRejectSkuModal('${sku.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition">
+                    <i class="ph-bold ph-prohibit"></i> Tolak SKU
+                  </button>
+                  <button onclick="handleFinalizeDecision('${sku.id}')" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold shadow-xs flex items-center gap-1">
+                    <i class="ph-bold ph-lock-simple"></i> Muktamadkan
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        } else if (sku.status === 'rejected') {
+          actionColHtml = `
+            <div class="flex flex-col items-end gap-1.5">
+              <span class="text-xs text-rose-600 font-semibold flex items-center justify-end gap-1">
+                <i class="ph-bold ph-x-circle"></i> Ditolak
+              </span>
+              ${(isDecider || isAdmin) ? `
+                <button onclick="handleReopenSku('${sku.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold flex items-center gap-1 transition">
+                  <i class="ph-bold ph-arrow-counter-clockwise"></i> Buka Semula
                 </button>
               ` : ''}
             </div>
@@ -1380,7 +1542,7 @@
         }
 
         return `
-          <tr class="hover:bg-slate-50/75 transition">
+          <tr class="hover:bg-slate-50/75 transition ${sku.status === 'rejected' ? 'bg-rose-50/20' : ''}">
             <td class="py-3.5 px-4">
               <p class="font-bold text-slate-800 leading-tight">${sku.sku_name}</p>
               <p class="text-xs font-mono text-slate-400">${sku.sku_code || '-'}</p>
@@ -1498,12 +1660,13 @@
       const sku = skus.find(s => s.id === skuId);
       if (!sku) return;
       const myProposal = (sku.price_proposals || []).find(p => p.proposed_by === currentUser.id);
+      const isMyReject = isRejectProposal(myProposal);
 
       document.getElementById('prop-sku-id').value = sku.id;
       document.getElementById('prop-sku-name').innerText = sku.sku_name;
       document.getElementById('prop-cost-price').innerText = `RM ${parseFloat(sku.cost_price || 0).toFixed(2)} /karton`;
-      document.getElementById('prop-price-input').value = myProposal ? myProposal.proposed_price : '';
-      document.getElementById('prop-justification-input').value = myProposal ? (myProposal.justification || '') : '';
+      document.getElementById('prop-price-input').value = (myProposal && !isMyReject) ? myProposal.proposed_price : '';
+      document.getElementById('prop-justification-input').value = (myProposal && !isMyReject) ? (myProposal.justification || '') : '';
       openModal('modal-proposal');
     }
 
@@ -1530,6 +1693,145 @@
 
         closeModal('modal-proposal');
         showToast('Cadangan harga berjaya disimpan!', 'success');
+        await fetchCompanySkus();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    // Modal & Fungsi Panel Mencadangkan Penolakan SKU
+    function openProposeRejectModal(skuId) {
+      const sku = skus.find(s => s.id === skuId);
+      if (!sku) return;
+      const myProposal = (sku.price_proposals || []).find(p => p.proposed_by === currentUser.id);
+      const existingReason = isRejectProposal(myProposal) ? extractRejectProposalReason(myProposal) : '';
+
+      document.getElementById('prop-reject-sku-id').value = sku.id;
+      document.getElementById('prop-reject-sku-name').innerText = sku.sku_name;
+      document.getElementById('prop-reject-reason-input').value = existingReason === 'Tiada sebab dinyatakan' ? '' : existingReason;
+      openModal('modal-propose-reject');
+    }
+
+    async function submitRejectProposal(e) {
+      e.preventDefault();
+      const skuId = document.getElementById('prop-reject-sku-id').value;
+      const reason = document.getElementById('prop-reject-reason-input').value.trim();
+
+      if (!reason) {
+        showToast('Sila nyatakan sebab cadangan penolakan.', 'error');
+        return;
+      }
+
+      try {
+        const { error } = await supabaseClient.from('price_proposals').upsert({
+          sku_id: skuId,
+          proposed_by: currentUser.id,
+          proposed_price: 0,
+          justification: `[CADANGAN TOLAK] ${reason}`
+        }, { onConflict: 'sku_id,proposed_by' });
+
+        if (error) throw error;
+
+        closeModal('modal-propose-reject');
+        showToast('Cadangan penolakan SKU telah dihantar!', 'info');
+        await fetchCompanySkus();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    // Modal & Fungsi Pengesahan Penolakan SKU (Decider / Admin)
+    function openRejectSkuModal(skuId, prefillReason = '') {
+      const sku = skus.find(s => s.id === skuId);
+      if (!sku) return;
+
+      document.getElementById('reject-sku-id').value = sku.id;
+      document.getElementById('reject-sku-name').innerText = sku.sku_name;
+      document.getElementById('reject-reason-input').value = prefillReason || '';
+      openModal('modal-reject-sku');
+    }
+
+    async function submitRejectSku(e) {
+      e.preventDefault();
+      const skuId = document.getElementById('reject-sku-id').value;
+      const reason = document.getElementById('reject-reason-input').value.trim();
+
+      if (!reason) {
+        showToast('Sila nyatakan sebab penolakan SKU.', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-reject-sku');
+      const originalText = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = 'Menyimpan...';
+
+      try {
+        localRejectionReasons[skuId] = reason;
+
+        // Cuba simpan bersama lajur rejection_reason jika wujud di Supabase
+        let { error } = await supabaseClient
+          .from('sku_master')
+          .update({
+            status: 'rejected',
+            rejection_reason: reason
+          })
+          .eq('id', skuId);
+
+        // Fallback jika lajur rejection_reason belum dicipta di jadual sku_master
+        if (error && (error.message.includes('rejection_reason') || error.code === '42703')) {
+          const fallbackRes = await supabaseClient
+            .from('sku_master')
+            .update({ status: 'rejected' })
+            .eq('id', skuId);
+          error = fallbackRes.error;
+        }
+
+        if (error) throw error;
+
+        closeModal('modal-reject-sku');
+        showToast('SKU telah ditolak dan status dikemaskini.', 'info');
+        await fetchCompanySkus();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+      }
+    }
+
+    async function handleReopenSku(skuId) {
+      const confirmed = await showConfirmModal(
+        'Buka Semula SKU',
+        'Adakah anda mahu membuka semula SKU yang ditolak ini ke peringkat kutipan cadangan?'
+      );
+      if (!confirmed) return;
+
+      try {
+        let { error } = await supabaseClient
+          .from('sku_master')
+          .update({
+            status: 'proposal_open',
+            selected_proposal_id: null,
+            rejection_reason: null
+          })
+          .eq('id', skuId);
+
+        if (error && (error.message.includes('rejection_reason') || error.code === '42703')) {
+          const fallbackRes = await supabaseClient
+            .from('sku_master')
+            .update({
+              status: 'proposal_open',
+              selected_proposal_id: null
+            })
+            .eq('id', skuId);
+          error = fallbackRes.error;
+        }
+
+        if (error) throw error;
+
+        delete localRejectionReasons[skuId];
+        showToast('SKU dibuka semula untuk kutipan cadangan.', 'success');
         await fetchCompanySkus();
       } catch (err) {
         showToast(err.message, 'error');
