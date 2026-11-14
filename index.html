@@ -103,7 +103,7 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2 sm:gap-3">
           <div class="hidden sm:flex flex-col text-right">
             <span id="user-display-name" class="text-xs font-bold text-slate-800">Nama Panel</span>
             <div class="flex items-center justify-end gap-1.5">
@@ -113,6 +113,12 @@
           </div>
 
           <div class="h-8 w-px bg-slate-200 hidden sm:block"></div>
+
+          <!-- Butang Tukar Kata Laluan -->
+          <button onclick="openChangePasswordModal()" class="p-2 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 rounded-xl transition flex items-center gap-1.5 text-xs font-semibold" title="Tukar Kata Laluan">
+            <i class="ph-bold ph-key text-base"></i>
+            <span class="hidden md:inline">Tukar Kata Laluan</span>
+          </button>
 
           <button onclick="handleSignOut()" class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1.5 text-xs font-semibold" title="Log Keluar">
             <i class="ph-bold ph-sign-out text-base"></i>
@@ -605,20 +611,23 @@
     </div>
   </div>
 
-  <!-- Modal Kemas Kini Kata Laluan Baharu -->
+  <!-- Modal Kemas Kini / Tetapan Kata Laluan (Untuk Invite, Reset & Tukar Password) -->
   <div id="modal-update-password" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100">
-      <div class="pb-3 border-b border-slate-100 mb-4">
-        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-          <i class="ph-bold ph-lock-key text-indigo-600"></i>
-          <span>Cipta Kata Laluan Baharu</span>
-        </h3>
-        <p class="text-xs text-slate-500 mt-1">Sila masukkan kata laluan baharu untuk akaun anda.</p>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+        <div>
+          <h3 id="update-pw-title" class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i class="ph-bold ph-lock-key text-indigo-600"></i>
+            <span>Tukar Kata Laluan</span>
+          </h3>
+          <p id="update-pw-subtitle" class="text-xs text-slate-500 mt-1">Masukkan kata laluan baharu anda (minimum 6 aksara).</p>
+        </div>
+        <button id="btn-close-update-pw" onclick="closeModal('modal-update-password')" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
       </div>
 
       <form onsubmit="handleUpdateNewPassword(event)" class="space-y-4">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Kata Laluan Baharu</label>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Kata Laluan Baharu <span class="text-rose-500">*</span></label>
           <div class="relative">
             <i class="ph ph-lock-key absolute left-3 top-3 text-slate-400 text-lg"></i>
             <input type="password" id="new-password-input" required minlength="6" placeholder="••••••••" class="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600">
@@ -627,8 +636,21 @@
             </button>
           </div>
         </div>
-        <div class="flex justify-end pt-2">
-          <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Simpan Kata Laluan</button>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Sahkan Kata Laluan Baharu <span class="text-rose-500">*</span></label>
+          <div class="relative">
+            <i class="ph ph-check-circle absolute left-3 top-3 text-slate-400 text-lg"></i>
+            <input type="password" id="confirm-password-input" required minlength="6" placeholder="••••••••" class="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600">
+            <button type="button" onclick="togglePasswordVisibility('confirm-password-input', 'icon-confirm-pw-toggle')" class="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition">
+              <i id="icon-confirm-pw-toggle" class="ph ph-eye text-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="btn-cancel-update-pw" onclick="closeModal('modal-update-password')" class="px-4 py-2.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">Batal</button>
+          <button type="submit" id="btn-save-new-pw" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Simpan Kata Laluan</button>
         </div>
       </form>
     </div>
@@ -669,6 +691,7 @@
     let parsedCsvRows = [];
     let logisticsCosts = [];
     let currentSimSku = null;
+    let isOnboardingPasswordSetup = false;
 
     // Data Lalai Kadar Lori Destinasi (Fallback jika jadual Supabase belum diisi)
     const DEFAULT_LOGISTICS_RATES = [
@@ -726,6 +749,36 @@
     function closeModal(id) {
       const el = document.getElementById(id);
       if (el) el.classList.add('hidden');
+    }
+
+    // Buka modal tetapan/tukar kata laluan mengikut mod (Invite/Recovery vs Tukar Biasa)
+    function openPasswordSetupModal(isOnboarding = false) {
+      isOnboardingPasswordSetup = isOnboarding;
+      const titleEl = document.getElementById('update-pw-title');
+      const subEl = document.getElementById('update-pw-subtitle');
+      const closeBtn = document.getElementById('btn-close-update-pw');
+      const cancelBtn = document.getElementById('btn-cancel-update-pw');
+
+      document.getElementById('new-password-input').value = '';
+      document.getElementById('confirm-password-input').value = '';
+
+      if (isOnboarding) {
+        titleEl.innerHTML = `<i class="ph-bold ph-lock-key text-indigo-600"></i><span>Cipta Kata Laluan Akaun</span>`;
+        subEl.innerText = 'Selamat datang! Sila tetapkan kata laluan baharu untuk log masuk pada masa hadapan.';
+        closeBtn.classList.add('hidden');
+        cancelBtn.classList.add('hidden');
+      } else {
+        titleEl.innerHTML = `<i class="ph-bold ph-key text-indigo-600"></i><span>Tukar Kata Laluan</span>`;
+        subEl.innerText = 'Masukkan kata laluan baharu anda (minimum 6 aksara).';
+        closeBtn.classList.remove('hidden');
+        cancelBtn.classList.remove('hidden');
+      }
+
+      openModal('modal-update-password');
+    }
+
+    function openChangePasswordModal() {
+      openPasswordSetupModal(false);
     }
 
     // Custom App Confirmation Modal (Promise Based)
@@ -813,14 +866,32 @@
     async function handleUpdateNewPassword(e) {
       e.preventDefault();
       const newPassword = document.getElementById('new-password-input').value;
+      const confirmPassword = document.getElementById('confirm-password-input').value;
+
+      if (newPassword !== confirmPassword) {
+        showToast('Pengesahan kata laluan tidak sepadan. Sila semak semula.', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('btn-save-new-pw');
+      const originalText = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = 'Menyimpan...';
 
       try {
         const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
         if (error) throw error;
+
+        isOnboardingPasswordSetup = false;
         closeModal('modal-update-password');
-        showToast('Kata laluan anda telah berjaya dikemas kini!', 'success');
+        document.getElementById('new-password-input').value = '';
+        document.getElementById('confirm-password-input').value = '';
+        showToast('Kata laluan anda telah berjaya disimpan!', 'success');
       } catch (err) {
         showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
       }
     }
 
@@ -833,21 +904,33 @@
       showToast('Anda telah log keluar.', 'info');
     }
 
-    // Session Initialization
+    // Session Initialization (Mengesan Invite & Password Recovery)
     window.addEventListener('load', async () => {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const searchParams = new URLSearchParams(window.location.search);
+      const authType = hashParams.get('type') || searchParams.get('type');
+      const isInviteOrRecovery = authType === 'invite' || authType === 'recovery';
+
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session) {
-        handleUserSession(session.user);
+        await handleUserSession(session.user);
+        if (isInviteOrRecovery) {
+          openPasswordSetupModal(true);
+        }
       } else {
         document.getElementById('auth-view').classList.remove('hidden');
       }
 
-      supabaseClient.auth.onAuthStateChange((event, session) => {
+      supabaseClient.auth.onAuthStateChange(async (event, session) => {
         if (event === 'PASSWORD_RECOVERY') {
-          openModal('modal-update-password');
-        } else if (session) {
-          handleUserSession(session.user);
-        } else {
+          if (session) await handleUserSession(session.user);
+          openPasswordSetupModal(true);
+        } else if (event === 'SIGNED_IN' && session) {
+          await handleUserSession(session.user);
+          if (isInviteOrRecovery) {
+            openPasswordSetupModal(true);
+          }
+        } else if (!session) {
           document.getElementById('auth-view').classList.remove('hidden');
           document.getElementById('app-view').classList.add('hidden');
         }
@@ -1593,7 +1676,7 @@
       const cartonCount = getCartonsPerPallet(sku);
 
       document.getElementById('sim-sku-name').innerText = sku.sku_name;
-      document.getElementById('sim-sku-code').innerText = sku.sku_code;
+      document.getElementById('sim-sku-code').innerText = sku.sku_code || '-';
       document.getElementById('sim-sku-base-cost').innerText = `RM ${parseFloat(sku.cost_price || 0).toFixed(2)} /ktn`;
       document.getElementById('sim-sku-pallet-cap').innerText = `${cartonCount} ktn/palet`;
 
